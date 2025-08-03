@@ -15,9 +15,11 @@ interface GameEndModalProps {
   score: number;
   onClose: () => void;
   onScoreSaved: () => void;
+  isPerfectScore?: boolean;
+  onContinueChallenge?: () => void;
 }
 
-export default function GameEndModal({ visible, score, onClose, onScoreSaved }: GameEndModalProps) {
+export default function GameEndModal({ visible, score, onClose, onScoreSaved, isPerfectScore = false, onContinueChallenge }: GameEndModalProps) {
   const [userName, setUserName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -63,6 +65,16 @@ export default function GameEndModal({ visible, score, onClose, onScoreSaved }: 
     onClose();
   };
 
+  const handleContinueChallenge = () => {
+    console.log('Continue challenge button clicked');
+    setUserName('');
+    setShowSuccess(false);
+    // onClose() 호출하지 않음 - 스코어보드로 네비게이션하지 않도록
+    if (onContinueChallenge) {
+      onContinueChallenge();
+    }
+  };
+
   return (
     <Modal
       visible={visible}
@@ -87,8 +99,15 @@ export default function GameEndModal({ visible, score, onClose, onScoreSaved }: 
           ) : (
             // 점수 입력 화면
             <>
-              <Text style={styles.title}>🎉 게임 완료!</Text>
+              <Text style={styles.title}>
+                {isPerfectScore ? '🎉 완벽해요!' : '🎉 게임 완료!'}
+              </Text>
               <Text style={styles.scoreText}>최종 점수: {score}점</Text>
+              {isPerfectScore && (
+                <Text style={styles.perfectMessage}>
+                  모든 문제를 맞추셨네요! 👏
+                </Text>
+              )}
               
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>이름을 입력하세요</Text>
@@ -103,6 +122,16 @@ export default function GameEndModal({ visible, score, onClose, onScoreSaved }: 
               </View>
 
               <View style={styles.buttonContainer}>
+                {isPerfectScore && onContinueChallenge && (
+                  <TouchableOpacity
+                    style={[styles.button, styles.challengeButton]}
+                    onPress={handleContinueChallenge}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={styles.challengeButtonText}>🚀 더 도전하기</Text>
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
                   style={[styles.button, styles.primaryButton]}
                   onPress={handleSaveScore}
@@ -123,7 +152,10 @@ export default function GameEndModal({ visible, score, onClose, onScoreSaved }: 
               </View>
 
               <Text style={styles.infoText}>
-                점수를 저장하면 스코어보드에서 순위를 확인할 수 있어요!
+                {isPerfectScore 
+                  ? '더 도전하거나 점수를 저장해보세요!' 
+                  : '점수를 저장하면 스코어보드에서 순위를 확인할 수 있어요!'
+                }
               </Text>
             </>
           )}
@@ -239,5 +271,20 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  perfectMessage: {
+    fontSize: 16,
+    color: '#FF9800',
+    textAlign: 'center',
+    marginBottom: 20,
+    fontWeight: '600',
+  },
+  challengeButton: {
+    backgroundColor: '#FF9800',
+  },
+  challengeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

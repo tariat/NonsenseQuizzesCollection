@@ -133,6 +133,11 @@ export default function QuizGameScreen() {
     // 3초 후 자동으로 다음 문제로
     const timer = setTimeout(() => {
       if (currentQuestionNumber >= totalQuestions) {
+        // 게임 완료 - 시간 초과로 끝났으므로 완벽 점수는 불가능
+        const isPerfect = score === totalQuestions;
+        console.log(`Game completed (timeout)! Score: ${score}/${totalQuestions}, Perfect: ${isPerfect}`);
+        
+        setIsPerfectScore(isPerfect);
         setGameCompleted(true);
       } else {
         moveToNextQuiz();
@@ -261,10 +266,9 @@ export default function QuizGameScreen() {
   // 다음 퀴즈로 이동 (새로 정의 - 위에서 정의된 것 사용하지 않음)
   const moveToNextQuiz = () => {
     if (currentQuestionNumber >= totalQuestions) {
-      // 게임 완료 - 점수 체크
-      const finalScore = gameState === 'correct' ? score + 1 : score;
-      const isPerfect = finalScore === totalQuestions;
-      console.log(`Game completed! Score: ${finalScore}/${totalQuestions}, Perfect: ${isPerfect}`);
+      // 게임 완료 - 현재 점수로 완벽성 체크 (점수는 이미 업데이트됨)
+      const isPerfect = score === totalQuestions;
+      console.log(`Game completed! Score: ${score}/${totalQuestions}, Perfect: ${isPerfect}`);
       
       setIsPerfectScore(isPerfect);
       setGameCompleted(true);
@@ -323,9 +327,10 @@ export default function QuizGameScreen() {
     
     // 3초 후 자동으로 다음 문제로 넘어가기
     const timer = setTimeout(() => {
+      const finalScore = isCorrect ? score + 1 : score;
+      
       if (currentQuestionNumber >= totalQuestions) {
         // 게임 완료 - 점수 체크
-        const finalScore = isCorrect ? score + 1 : score;
         const isPerfect = finalScore === totalQuestions;
         console.log(`Game completed! Score: ${finalScore}/${totalQuestions}, Perfect: ${isPerfect}`);
         
@@ -373,6 +378,10 @@ export default function QuizGameScreen() {
     
     if (currentQuestionNumber >= totalQuestions) {
       // 게임 완료
+      const isPerfect = score === totalQuestions;
+      console.log(`Game completed (rated)! Score: ${score}/${totalQuestions}, Perfect: ${isPerfect}`);
+      
+      setIsPerfectScore(isPerfect);
       setGameCompleted(true);
     } else {
       // 다음 문제로
@@ -409,6 +418,11 @@ export default function QuizGameScreen() {
           onPress: () => {
             stopQuestionTimer();
             if (currentQuestionNumber >= totalQuestions) {
+              // 게임 완료
+              const isPerfect = score === totalQuestions;
+              console.log(`Game completed (skipped)! Score: ${score}/${totalQuestions}, Perfect: ${isPerfect}`);
+              
+              setIsPerfectScore(isPerfect);
               setGameCompleted(true);
             } else {
               moveToNextQuiz();
@@ -422,9 +436,9 @@ export default function QuizGameScreen() {
   // startNewGame은 이미 위에서 정의됨
 
   const continueChallenge = async () => {
-    console.log('Starting new challenge round...');
-    setCurrentQuestionNumber(1);
-    setScore(0);
+    console.log('Starting new challenge round... Current score:', score);
+    setCurrentQuestionNumber(1); // 문제 번호만 리셋
+    // setScore(0); // 점수는 유지!
     setUsedQuizIds([]);
     setUsedCharIndices([]);
     setGameCompleted(false);
@@ -439,15 +453,25 @@ export default function QuizGameScreen() {
     try {
       const quizzes = await QuizService.getRandomQuizzes(totalQuestions, allUsedQuizIds);
       if (quizzes.length === 0) {
-        setIsAllQuizzesCompleted(true);
-        setGameCompleted(true);
-        return;
+        // 더 이상 새로운 퀴즈가 없으면 알림만 표시하고 게임 상태는 유지
+        Alert.alert('알림', '더 이상 새로운 퀴즈가 없습니다.\n기존 퀴즈로 계속 진행됩니다.');
+        // 기존 퀴즈를 재사용하여 계속 진행
+        const reusedQuizzes = await QuizService.getRandomQuizzes(totalQuestions, []);
+        if (reusedQuizzes.length === 0) {
+          Alert.alert('오류', '사용 가능한 퀴즈가 없습니다.');
+          return;
+        }
+        setGameQuizzes(reusedQuizzes);
+        setCurrentQuizIndex(0);
+        setCurrentQuiz(reusedQuizzes[0]);
+        createCharGrid(reusedQuizzes[0].answer);
+      } else {
+        setGameQuizzes(quizzes);
+        setCurrentQuizIndex(0);
+        setAllUsedQuizIds(prev => [...prev, ...quizzes.map(q => q.id)]);
+        setCurrentQuiz(quizzes[0]);
+        createCharGrid(quizzes[0].answer);
       }
-      setGameQuizzes(quizzes);
-      setCurrentQuizIndex(0);
-      setAllUsedQuizIds(prev => [...prev, ...quizzes.map(q => q.id)]);
-      setCurrentQuiz(quizzes[0]);
-      createCharGrid(quizzes[0].answer);
     } catch (error) {
       console.error('Error starting new challenge:', error);
       Alert.alert('오류', '새로운 도전을 시작할 수 없습니다.');
@@ -462,6 +486,7 @@ export default function QuizGameScreen() {
         <GameEndModal
           visible={gameCompleted}
           score={score}
+          isPerfectScore={isPerfectScore}
           onClose={() => {
             console.log('GameEndModal onClose called, navigating to scoreboard');
             setGameCompleted(false);
@@ -472,94 +497,12 @@ export default function QuizGameScreen() {
             setGameCompleted(false);
             navigation.navigate('Scoreboard' as never);
           }}
+          onContinueChallenge={() => {
+            console.log('GameEndModal onContinueChallenge called');
+            setGameCompleted(false); // 모달 닫기
+            continueChallenge(); // 새로운 도전 시작
+          }}
         />
-        <View style={styles.gameCompletedContainer}>
-          {isAllQuizzesCompleted ? (
-            <>
-              <Text style={styles.gameCompletedTitle}>🏆 축하합니다!</Text>
-              <Text style={styles.gameCompletedSubtitle}>
-                모든 문제를 다 맞췄습니다!
-              </Text>
-              <Text style={styles.completionMessage}>
-                총 {allUsedQuizIds.length}개의 퀴즈를 완주하셨습니다.
-              </Text>
-            </>
-          ) : isPerfectScore ? (
-            <>
-              <Text style={styles.gameCompletedTitle}>🎉 완벽해요!</Text>
-              <Text style={styles.gameCompletedSubtitle}>
-                라운드 {totalRounds}: {totalQuestions}문제 모두 정답!
-              </Text>
-              <Text style={styles.perfectMessage}>
-                더 많은 퀴즈에 도전해보세요!
-              </Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.gameCompletedTitle}>🎉 게임 완료!</Text>
-              <Text style={styles.gameCompletedSubtitle}>
-                라운드 {totalRounds}: 총 {totalQuestions}문제 중 {score}문제를 맞추셨습니다!
-              </Text>
-            </>
-          )}
-          
-          <View style={styles.buttonContainer}>
-            {isPerfectScore && !isAllQuizzesCompleted && (
-              <TouchableOpacity 
-                style={[styles.gameButton, styles.challengeButton]} 
-                onPress={continueChallenge}
-              >
-                <Text style={styles.challengeButtonText}>🚀 더 도전하기</Text>
-              </TouchableOpacity>
-            )}
-            
-            <TouchableOpacity 
-              style={[styles.gameButton, styles.newGameButton]} 
-              onPress={() => {
-                // 완전히 새로운 게임 시작
-                console.log('Starting completely new game...');
-                setCurrentQuestionNumber(1);
-                setScore(0);
-                setUsedQuizIds([]);
-                setUsedCharIndices([]);
-                setGameCompleted(false);
-                setGameQuizzes([]);
-                setCurrentQuizIndex(0);
-                setAllUsedQuizIds([]);
-                setTotalRounds(1);
-                setIsPerfectScore(false);
-                setIsAllQuizzesCompleted(false);
-                stopQuestionTimer();
-                
-                // 새 게임 시작
-                const startGame = async () => {
-                  setIsLoadingQuizzes(true);
-                  try {
-                    const quizzes = await QuizService.getRandomQuizzes(totalQuestions, []);
-                    if (quizzes.length === 0) {
-                      Alert.alert('오류', '사용 가능한 퀴즈가 없습니다.');
-                      return;
-                    }
-                    setGameQuizzes(quizzes);
-                    setCurrentQuizIndex(0);
-                    setAllUsedQuizIds(quizzes.map(q => q.id));
-                    setCurrentQuiz(quizzes[0]);
-                    createCharGrid(quizzes[0].answer);
-                  } catch (error) {
-                    console.error('Error starting new game:', error);
-                    Alert.alert('오류', '새 게임을 시작할 수 없습니다.');
-                  } finally {
-                    setIsLoadingQuizzes(false);
-                  }
-                };
-                
-                startGame();
-              }}
-            >
-              <Text style={styles.newGameButtonText}>🎮 새 게임 시작</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       </View>
     );
   }
